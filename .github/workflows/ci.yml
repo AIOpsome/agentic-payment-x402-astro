@@ -40,3 +40,8 @@ jobs:
 
       - name: Typecheck
         run: pnpm typecheck
+
+      # In-workspace builds resolve through pnpm symlinks, so they cannot catch an `exports`
+      # subpath that is missing from the published tarball. This packs and installs for real.
+      - name: Verify Packed Artifacts In A Real Astro App
+        run: pnpm verify:packed

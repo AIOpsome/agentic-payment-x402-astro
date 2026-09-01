@@ -60,9 +60,14 @@ Both components require an `orderId`: the identifier of a real order or cart tha
 your own storage, with a price you control. It is forwarded in the settlement POST body and is the
 only thing the endpoint prices from.
 
+Each component ships as a real `.astro` single-file component on its own export subpath, so import
+it as a **default import** from that subpath. There is no named barrel import — a bundled JS barrel
+cannot re-export an Astro component.
+
 ```astro
 ---
-import { AgenticPayButton, WalletCheckout } from 'agentic-payment-x402-astro/components';
+import AgenticPayButton from 'agentic-payment-x402-astro/components/AgenticPayButton.astro';
+import WalletCheckout from 'agentic-payment-x402-astro/components/WalletCheckout.astro';
 import { getOrder } from '../lib/orders';
 
 const order = await getOrder(Astro.params.orderId!);

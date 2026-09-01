@@ -9,7 +9,7 @@
  * as the README documents, and asserts both that a genuine checkout succeeds and that tampering with
  * any client-controlled field cannot change the settled amount.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -279,5 +279,32 @@ describe('buildSettlementRequestBody', () => {
         })
       ).toThrow(/orderId/);
     }
+  });
+});
+
+/**
+ * Round 4: the components were unreachable in the published package because no `exports` subpath
+ * resolved to a `.astro` file (a JS barrel cannot re-export an Astro single-file component). This
+ * is the fast guard; `scripts/verify-packed-artifacts.sh` is the real one, since only a tarball
+ * install exercises Node/Vite's exports enforcement.
+ */
+describe('published exports reach the .astro components', () => {
+  const PKG = JSON.parse(readFileSync(resolve(HERE, '../package.json'), 'utf8'));
+
+  it('exposes every shipped .astro component on its own subpath', () => {
+    const components = readdirSync(resolve(HERE, '../src/components')).filter((f) =>
+      f.endsWith('.astro')
+    );
+    expect(components.length).toBeGreaterThan(0);
+
+    for (const file of components) {
+      const target = PKG.exports[`./components/${file}`];
+      expect(target, `missing exports subpath for ${file}`).toBe(`./src/components/${file}`);
+      expect(existsSync(resolve(HERE, '..', target))).toBe(true);
+    }
+  });
+
+  it('ships the .astro sources in the published files list', () => {
+    expect(PKG.files).toContain('src/components');
   });
 });
