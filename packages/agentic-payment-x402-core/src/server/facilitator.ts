@@ -131,10 +131,21 @@ export class FacilitatorClient {
           };
         }
 
+        // Security check: verify settled amount matches requested
+        if (settleData.amount !== undefined && settleData.amount !== null) {
+          if (String(settleData.amount) !== String(requirements.amount)) {
+            return {
+              success: false,
+              message: `Facilitator settled amount ${settleData.amount} does not match required amount ${requirements.amount}`,
+              facilitator: baseUrl,
+            };
+          }
+        }
+
         return {
           success: true,
           txHash: settleData.transaction || null,
-          settledAmount: settleData.amount || requirements.amount,
+          settledAmount: settleData.amount !== undefined ? settleData.amount : null,
           payer: settleData.payer || payload.payload.authorization.from,
           facilitator: baseUrl,
           rawResponse: settleData as Record<string, unknown>,

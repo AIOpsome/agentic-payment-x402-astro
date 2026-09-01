@@ -15,4 +15,11 @@ describe('Amount scaling and formatting', () => {
     expect(formatAssetUnits('2500000000')).toBe('2500');
     expect(formatAssetUnits('50000')).toBe('0.05');
   });
+
+  it('rejects zero, negative, or invalid amounts', () => {
+    expect(() => scaleToAssetUnits(0)).toThrow(/positive number greater than zero/);
+    expect(() => scaleToAssetUnits(-10)).toThrow(/positive number greater than zero/);
+    expect(() => scaleToAssetUnits('-5.00')).toThrow(/positive number greater than zero/);
+    expect(() => scaleToAssetUnits('invalid')).toThrow(/positive number greater than zero/);
+  });
 });

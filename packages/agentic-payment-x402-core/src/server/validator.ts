@@ -28,6 +28,13 @@ export function validatePaymentPayload(
     return { valid: false, error: 'Missing accepted payment requirements block' };
   }
 
+  if (p.accepted.scheme !== expectedRequirements.scheme) {
+    return {
+      valid: false,
+      error: `Scheme mismatch: accepted ${p.accepted.scheme}, expected ${expectedRequirements.scheme}`,
+    };
+  }
+
   if (p.accepted.network !== expectedRequirements.network) {
     return {
       valid: false,
@@ -77,6 +84,11 @@ export function validatePaymentPayload(
   }
 
   const now = Math.floor(Date.now() / 1000);
+  const validAfter = Number(auth.validAfter);
+  if (!isNaN(validAfter) && validAfter > now) {
+    return { valid: false, error: 'Authorization is not yet valid (validAfter in future)' };
+  }
+
   const validBefore = Number(auth.validBefore);
   if (isNaN(validBefore) || validBefore <= now) {
     return { valid: false, error: 'Authorization signature is expired (validBefore in past)' };

@@ -25,7 +25,23 @@ describe('Astro x402 Middleware', () => {
     expect(next).toHaveBeenCalled();
   });
 
-  it('returns HTTP 402 with PaymentRequirements when no payment header is provided', async () => {
+  it('intercepts trailing-slash variant of protected route safely (Issue #6)', async () => {
+    const next = vi.fn();
+    const context = {
+      request: new Request('http://localhost/api/premium-report/'),
+      url: new URL('http://localhost/api/premium-report/'),
+      locals: {},
+    };
+
+    const response = await middleware(context, next);
+    expect(response.status).toBe(402);
+    expect(next).not.toHaveBeenCalled();
+
+    const requiredHeader = response.headers.get('PAYMENT-REQUIRED');
+    expect(requiredHeader).not.toBeNull();
+  });
+
+  it('returns HTTP 402 with PAYMENT-REQUIRED header when no payment header is provided (Issue #2)', async () => {
     const next = vi.fn();
     const context = {
       request: new Request('http://localhost/api/premium-report'),
@@ -37,14 +53,14 @@ describe('Astro x402 Middleware', () => {
     expect(response.status).toBe(402);
     expect(next).not.toHaveBeenCalled();
 
-    const body = await response.json();
-    expect(body.error).toBe('Payment Required');
-    expect(body.x402Version).toBe(2);
-    expect(body.paymentRequirements.amount).toBe('5000000'); // $5.00 scaled to 6 decimals
-    expect(body.paymentRequirements.payTo).toBe(options.payTo);
+    const requiredHeader = response.headers.get('PAYMENT-REQUIRED');
+    expect(requiredHeader).not.toBeNull();
+    const decoded = JSON.parse(Buffer.from(requiredHeader!, 'base64').toString('utf8'));
+    expect(decoded.x402Version).toBe(2);
+    expect(decoded.accepts[0].amount).toBe('5000000');
   });
 
-  it('settles and passes through when valid X-Payment header is supplied', async () => {
+  it('settles with PAYMENT-SIGNATURE header and responds with PAYMENT-RESPONSE (Issue #2)', async () => {
     const reqs: PaymentRequirements = {
       scheme: 'exact',
       network: 'eip155:8453',
@@ -92,11 +108,12 @@ describe('Astro x402 Middleware', () => {
       return Promise.reject(new Error('Unknown URL'));
     });
 
+    const base64Payload = Buffer.from(JSON.stringify(payload)).toString('base64');
     const next = vi.fn().mockResolvedValue(new Response('Premium Content Delivered', { status: 200 }));
     const context = {
       request: new Request('http://localhost/api/premium-report', {
         headers: {
-          'X-Payment': JSON.stringify(payload),
+          'PAYMENT-SIGNATURE': base64Payload,
         },
       }),
       url: new URL('http://localhost/api/premium-report'),
@@ -106,6 +123,10 @@ describe('Astro x402 Middleware', () => {
     const response = await middleware(context, next);
     expect(response.status).toBe(200);
     expect(next).toHaveBeenCalled();
-    expect(response.headers.get('X-Payment-Transaction')).toBe('0xtx789');
+
+    const responseHeader = response.headers.get('PAYMENT-RESPONSE');
+    expect(responseHeader).not.toBeNull();
+    const decodedRes = JSON.parse(Buffer.from(responseHeader!, 'base64').toString('utf8'));
+    expect(decodedRes.transaction).toBe('0xtx789');
   });
 });

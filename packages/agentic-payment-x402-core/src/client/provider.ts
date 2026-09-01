@@ -4,29 +4,46 @@
 
 import type { NetworkConfig } from '../types.js';
 
-export const BASE_MAINNET: NetworkConfig = {
+export interface ExtendedNetworkConfig extends NetworkConfig {
+  defaultAsset: string;
+  defaultTokenName: string;
+  defaultTokenVersion: string;
+}
+
+export const BASE_MAINNET: ExtendedNetworkConfig = {
   caip2: 'eip155:8453',
   chainId: 8453,
   name: 'Base',
   isTestnet: false,
   rpcUrl: 'https://mainnet.base.org',
   blockExplorerUrl: 'https://basescan.org',
+  defaultAsset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+  defaultTokenName: 'USD Coin',
+  defaultTokenVersion: '2',
   nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
 };
 
-export const BASE_SEPOLIA: NetworkConfig = {
+export const BASE_SEPOLIA: ExtendedNetworkConfig = {
   caip2: 'eip155:84532',
   chainId: 84532,
   name: 'Base Sepolia',
   isTestnet: true,
   rpcUrl: 'https://sepolia.base.org',
   blockExplorerUrl: 'https://sepolia.basescan.org',
+  defaultAsset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+  defaultTokenName: 'USDC',
+  defaultTokenVersion: '2',
   nativeCurrency: { name: 'Sepolia Ether', symbol: 'ETH', decimals: 18 },
 };
 
-export const KNOWN_NETWORKS: Record<number, NetworkConfig> = {
+export const KNOWN_NETWORKS: Record<number, ExtendedNetworkConfig> = {
   8453: BASE_MAINNET,
   84532: BASE_SEPOLIA,
+};
+
+export const KNOWN_NETWORKS_BY_CAIP2: Record<string, ExtendedNetworkConfig> = {
+  'eip155:8453': BASE_MAINNET,
+  'eip155:84532': BASE_SEPOLIA,
 };
 
 export interface Eip1193Provider {

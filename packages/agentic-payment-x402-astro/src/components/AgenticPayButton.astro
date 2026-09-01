@@ -80,7 +80,9 @@ const buttonId = `agentic-pay-${Math.random().toString(36).substring(2, 9)}`;
       const amount = btn.dataset.amount || '0';
       const payTo = btn.dataset.payto || '';
       const network = btn.dataset.network || 'eip155:8453';
-      const asset = btn.dataset.asset || '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+      const asset = btn.dataset.asset || (network === 'eip155:84532'
+        ? '0x036CbD53842c5426634e7929541eC2318f3dCF7e'
+        : '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913');
       const endpoint = btn.dataset.endpoint || '/api/x402/settle';
       const redirect = btn.dataset.redirect;
 

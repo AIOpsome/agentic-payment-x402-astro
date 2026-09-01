@@ -1,11 +1,12 @@
 /**
- * 32-byte Cryptographic Nonce generator.
+ * 32-byte Cryptographic Nonce generator using standard CSPRNG.
  */
 
 export function generateNonce(): string {
-  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+  // 1. Web Cryptography API (Browser, Modern Node, Bun, Deno, Edge)
+  if (typeof globalThis !== 'undefined' && globalThis.crypto && globalThis.crypto.getRandomValues) {
     const bytes = new Uint8Array(32);
-    crypto.getRandomValues(bytes);
+    globalThis.crypto.getRandomValues(bytes);
     return (
       '0x' +
       Array.from(bytes)
@@ -14,12 +15,17 @@ export function generateNonce(): string {
     );
   }
 
-  // Node.js fallback
-  const randomBytes = Array.from({ length: 32 }, () => Math.floor(Math.random() * 256));
-  return (
-    '0x' +
-    randomBytes
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('')
-  );
+  // 2. Node.js native crypto module
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const nodeCrypto = require('crypto');
+    if (nodeCrypto && typeof nodeCrypto.randomBytes === 'function') {
+      const bytes = nodeCrypto.randomBytes(32);
+      return '0x' + bytes.toString('hex');
+    }
+  } catch {
+    // Fall through to error
+  }
+
+  throw new Error('No cryptographically secure random number generator (CSPRNG) available in this environment.');
 }

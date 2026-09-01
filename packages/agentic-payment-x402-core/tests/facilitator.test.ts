@@ -55,13 +55,11 @@ describe('Facilitator Client', () => {
 
     expect(result.success).toBe(true);
     expect(result.txHash).toBe('0xtxhash123');
+    expect(result.settledAmount).toBe('1000000');
   });
 
-  it('attaches CDP authentication headers when api keys are present', async () => {
-    let capturedHeaders: Record<string, string> = {};
-
-    global.fetch = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
-      capturedHeaders = (init?.headers || {}) as Record<string, string>;
+  it('rejects settlement when facilitator returns mismatched amount', async () => {
+    global.fetch = vi.fn().mockImplementation((url: string) => {
       if (url.endsWith('/verify')) {
         return Promise.resolve({
           ok: true,
@@ -74,27 +72,19 @@ describe('Facilitator Client', () => {
           json: () =>
             Promise.resolve({
               success: true,
-              transaction: '0xcdptx',
+              transaction: '0xtxhash123',
               network: 'eip155:8453',
+              amount: '500000', // Mismatched lower amount
             }),
         });
       }
       return Promise.reject(new Error('Unknown URL'));
     });
 
-    const client = new FacilitatorClient([
-      {
-        url: 'https://api.cdp.coinbase.com/platform/v2/x402',
-        apiKeyId: 'my_key_id',
-        apiKeySecret: 'my_secret_token',
-      },
-    ]);
-
+    const client = new FacilitatorClient(['https://facilitator.payai.network']);
     const result = await client.settle(payload, reqs);
 
-    expect(result.success).toBe(true);
-    expect(capturedHeaders['Authorization']).toBe('Bearer my_secret_token');
-    expect(capturedHeaders['CB-ACCESS-KEY']).toBe('my_key_id');
-    expect(capturedHeaders['X-CDP-KEY-ID']).toBe('my_key_id');
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('does not match required amount');
   });
 });
