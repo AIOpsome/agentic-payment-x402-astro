@@ -1,16 +1,29 @@
 import type { AstroIntegration } from 'astro';
+import { KNOWN_NETWORKS_BY_CAIP2 } from 'agentic-payment-x402-core';
 import type { AgenticPayAstroOptions } from './types.js';
 
-export const NETWORK_DEFAULT_ASSETS: Record<string, string> = {
-  'eip155:8453': '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // Base Mainnet USDC
-  'eip155:84532': '0x036CbD53842c5426634e7929541eC2318f3dCF7e', // Base Sepolia USDC
-};
+export const NETWORK_DEFAULT_ASSETS: Record<string, string> = Object.fromEntries(
+  Object.entries(KNOWN_NETWORKS_BY_CAIP2).map(([caip2, config]) => [caip2, config.defaultAsset])
+);
 
 export const DEFAULT_NETWORK = 'eip155:8453';
 export const DEFAULT_BASE_USDC = NETWORK_DEFAULT_ASSETS[DEFAULT_NETWORK];
 
+/**
+ * Resolves the default settlement asset for a network. Throws for unrecognized networks instead of
+ * silently falling back to Base mainnet USDC, which would price and settle a payment on a chain the
+ * merchant never configured.
+ */
 export function getDefaultAssetForNetwork(network: string): string {
-  return NETWORK_DEFAULT_ASSETS[network] || DEFAULT_BASE_USDC;
+  const asset = NETWORK_DEFAULT_ASSETS[network];
+  if (!asset) {
+    throw new Error(
+      `Unknown x402 network "${network}": no default asset is known. ` +
+        `Supported networks: ${Object.keys(NETWORK_DEFAULT_ASSETS).join(', ')}. ` +
+        `Pass an explicit \`asset\` (ERC-20 contract address) in your agenticPay options for other networks.`
+    );
+  }
+  return asset;
 }
 
 /**

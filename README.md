@@ -80,7 +80,33 @@ import { AgenticPayButton, WalletCheckout } from 'agentic-payment-x402-astro/com
 />
 ```
 
-### 4. Enable AI Agent Protection via Middleware (`src/middleware.ts`)
+The `amount` prop only drives what the shopper is asked to sign. It is **never** what gets settled —
+the settlement endpoint prices the order server-side (next step).
+
+### 4. Add the Settlement Endpoint (`src/pages/api/x402/settle.ts`)
+
+`resolveOrderAmount` is **required**: everything in the POST body (`amount`, `orderId`, the signed
+`accepted` requirements) is client-controlled, so the amount that gets settled must come from your
+own server-side state. Without it the handler refuses to start.
+
+```typescript
+import { createX402SettlementHandler } from 'agentic-payment-x402-astro/endpoints';
+
+export const POST = createX402SettlementHandler({
+  payTo: process.env.MERCHANT_WALLET!,
+  facilitators: ['https://facilitator.payai.network'],
+  // Price in major currency units, resolved from merchant-side state only.
+  resolveOrderAmount: async ({ orderId }) => {
+    const order = await getOrder(String(orderId));
+    return order?.totalUsd ?? null; // null / undefined refuses the settlement
+  },
+});
+```
+
+A payload signed for less than the resolved price is rejected with `Amount mismatch` before the
+facilitator is ever contacted.
+
+### 5. Enable AI Agent Protection via Middleware (`src/middleware.ts`)
 
 ```typescript
 import { defineMiddleware } from 'astro:middleware';
@@ -102,6 +128,8 @@ export const onRequest = createX402Middleware({
 2. **EIP-3009 Gasless Signatures**: Shoppers sign an EIP-712 `TransferWithAuthorization` message without paying gas fees; the facilitator broadcasts the settlement on-chain.
 3. **Multi-Facilitator Failover**: Automatically attempts settlement against PayAI and Coinbase CDP with automatic fallback.
 4. **Idempotency & Nonce Management**: Cryptographically unique 32-byte nonces ensure zero duplicate charges.
+5. **Server-Side Pricing Only**: The settlement endpoint requires `resolveOrderAmount` and never reads a price from the request body, so a tampered `amount` cannot buy a $2,500 order for $0.01.
+6. **Fail-Closed Configuration**: Unknown networks, unusable route prices, and colliding protected-route keys raise explicit errors rather than silently defaulting to Base mainnet USDC.
 
 ---
 

@@ -3,10 +3,15 @@
  */
 
 import type { AuthorizationData } from '../types.js';
+import { getTokenDomainForNetwork } from '../networks.js';
 
 export interface Eip712DomainParams {
+  /** Token contract EIP-712 domain name. Required unless `network` is supplied. */
   name?: string;
+  /** Token contract EIP-712 domain version. Defaults to the value for `network`, else '2'. */
   version?: string;
+  /** CAIP-2 network id (e.g. 'eip155:84532'); resolves name/version from the known-networks table. */
+  network?: string;
   chainId: number;
   verifyingContract: string;
 }
@@ -40,6 +45,17 @@ export function buildTransferAuthorizationTypedData(
   domainParams: Eip712DomainParams,
   authData: AuthorizationData
 ): Eip712TypedData {
+  const networkDomain = domainParams.network ? getTokenDomainForNetwork(domainParams.network) : undefined;
+  const name = domainParams.name || networkDomain?.name;
+  if (!name) {
+    throw new Error(
+      'EIP-712 domain `name` is required: pass the token contract name explicitly, or pass `network` ' +
+        '(CAIP-2) so it can be resolved from the known-networks table. Token domain names differ per ' +
+        'network (e.g. "USD Coin" on Base mainnet vs "USDC" on Base Sepolia) and a wrong name produces ' +
+        'a signature the token contract will reject.'
+    );
+  }
+
   return {
     types: {
       EIP712Domain: [
@@ -59,8 +75,8 @@ export function buildTransferAuthorizationTypedData(
     },
     primaryType: 'TransferWithAuthorization',
     domain: {
-      name: domainParams.name || 'USD Coin',
-      version: domainParams.version || '2',
+      name,
+      version: domainParams.version || networkDomain?.version || '2',
       chainId: domainParams.chainId,
       verifyingContract: domainParams.verifyingContract,
     },

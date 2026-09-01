@@ -22,4 +22,23 @@ describe('Amount scaling and formatting', () => {
     expect(() => scaleToAssetUnits('-5.00')).toThrow(/positive number greater than zero/);
     expect(() => scaleToAssetUnits('invalid')).toThrow(/positive number greater than zero/);
   });
+
+  it('rounds sub-unit precision half-up instead of truncating (Issue #7)', () => {
+    expect(scaleToAssetUnits('10.9999999')).toBe('11000000');
+    expect(scaleToAssetUnits('0.0000005')).toBe('1');
+    expect(scaleToAssetUnits('1.2345675')).toBe('1234568');
+    expect(scaleToAssetUnits('1.2345674')).toBe('1234567');
+    expect(scaleToAssetUnits(10.9999999)).toBe('11000000');
+    expect(scaleToAssetUnits('1.005', 2)).toBe('101');
+  });
+
+  it('rejects amounts that round down to zero units', () => {
+    expect(() => scaleToAssetUnits('0.0000004')).toThrow(/zero units/);
+  });
+
+  it('rejects malformed numeric strings', () => {
+    expect(() => scaleToAssetUnits('1.2.3')).toThrow(/positive number greater than zero/);
+    expect(() => scaleToAssetUnits('1e6')).toThrow(/positive number greater than zero/);
+    expect(() => scaleToAssetUnits('$5.00')).toThrow(/positive number greater than zero/);
+  });
 });

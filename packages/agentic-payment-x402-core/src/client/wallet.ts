@@ -63,14 +63,18 @@ export async function signPaymentAuthorization(
   };
 
   // 5. Build EIP-712 payload with network-correct domain defaults
-  const tokenName = options.tokenName || networkDefaults?.defaultTokenName || 'USD Coin';
-  const tokenVersion = options.tokenVersion || networkDefaults?.defaultTokenVersion || '2';
   const verifyingContract = options.requirements.asset || networkDefaults?.defaultAsset;
+  if (!verifyingContract) {
+    throw new Error(
+      `No token contract address available for network "${networkKey}": set \`asset\` on the payment requirements.`
+    );
+  }
 
   const typedData = buildTransferAuthorizationTypedData(
     {
-      name: tokenName,
-      version: tokenVersion,
+      name: options.tokenName,
+      version: options.tokenVersion,
+      network: options.tokenName ? undefined : networkKey,
       chainId,
       verifyingContract,
     },

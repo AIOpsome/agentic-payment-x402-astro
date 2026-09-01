@@ -7,11 +7,23 @@ import {
 import type { AgenticPayAstroOptions } from './types.js';
 import { DEFAULT_NETWORK, getDefaultAssetForNetwork } from './integration.js';
 
+const RESOLVER_REQUIRED_MESSAGE =
+  'agentic-payment-x402-astro: `resolveOrderAmount` is required by createX402SettlementHandler. ' +
+  'The settlement endpoint never trusts a client-supplied amount, so the price must come from your own ' +
+  'server-side order lookup, e.g. resolveOrderAmount: async ({ orderId }) => (await getOrder(orderId)).totalUsd';
+
 /**
  * Creates an Astro API Route handler (POST) for settling human or agent checkout payloads.
- * Protects against client-controlled amount tampering by enforcing server-side price resolution.
+ *
+ * The settled amount always comes from `options.resolveOrderAmount`, never from the request body:
+ * every amount a client can send (`amount`, `orderId`, `paymentPayload.accepted`) is attacker-controlled.
  */
 export function createX402SettlementHandler(options: AgenticPayAstroOptions) {
+  const resolveOrderAmount = options.resolveOrderAmount;
+  if (typeof resolveOrderAmount !== 'function') {
+    throw new Error(RESOLVER_REQUIRED_MESSAGE);
+  }
+
   const facilitatorClient = new FacilitatorClient(options.facilitators);
   const network = options.network || DEFAULT_NETWORK;
   const asset = options.asset || getDefaultAssetForNetwork(network);
@@ -29,26 +41,25 @@ export function createX402SettlementHandler(options: AgenticPayAstroOptions) {
         });
       }
 
-      // Resolve server-side expected price
-      let expectedAmount: number | string;
-      if (options.resolveOrderAmount) {
-        expectedAmount = await options.resolveOrderAmount(body);
-      } else if (body.orderId && options.protectedRoutes && options.protectedRoutes[body.orderId]) {
-        const routeCfg = options.protectedRoutes[body.orderId];
-        expectedAmount = typeof routeCfg === 'object' ? routeCfg.amount : routeCfg;
-      } else if (body.amount !== undefined) {
-        // Fallback for standalone buttons with client amount, validating positive numeric value
-        expectedAmount = body.amount;
-      } else if (paymentPayload.accepted?.amount) {
-        expectedAmount = paymentPayload.accepted.amount;
-      } else {
-        return new Response(JSON.stringify({ error: 'Cannot determine server-side required amount' }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        });
+      const expectedAmount = await resolveOrderAmount(body);
+      if (expectedAmount === undefined || expectedAmount === null || expectedAmount === '') {
+        return new Response(
+          JSON.stringify({ error: 'Order not found or has no server-side price; settlement refused' }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } }
+        );
       }
 
-      const atomicAmount = scaleToAssetUnits(expectedAmount, decimals);
+      let atomicAmount: string;
+      try {
+        atomicAmount = scaleToAssetUnits(expectedAmount, decimals);
+      } catch (err: unknown) {
+        return new Response(
+          JSON.stringify({
+            error: `Server-side price resolution produced an unusable amount: ${(err as Error).message}`,
+          }),
+          { status: 500, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
 
       const requirements: PaymentRequirements = {
         scheme: 'exact',
