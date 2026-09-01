@@ -32,11 +32,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Typecheck
-        run: pnpm typecheck
+      - name: Build Bundles
+        run: pnpm build
 
       - name: Run Unit Tests
         run: pnpm test
 
-      - name: Build Bundles
-        run: pnpm build
+      - name: Typecheck
+        run: pnpm typecheck

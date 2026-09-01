@@ -10,6 +10,10 @@
     "forceConsistentCasingInFileNames": true,
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "paths": {
+      "agentic-payment-x402-core": ["../agentic-payment-x402-core/src/index.ts"],
+      "agentic-payment-x402-core/*": ["../agentic-payment-x402-core/src/*"]
+    }
   }
 }
