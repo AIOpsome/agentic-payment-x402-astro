@@ -2,9 +2,31 @@
   "name": "agentic-payment-x402-astro",
   "version": "0.1.0",
   "description": "Agentic Pay for Astro — x402 payment gateway, HTTP 402 middleware for AI agents, and reactive wallet checkout components.",
-  "keywords": ["astro", "astro-integration", "x402", "crypto", "usdc", "base", "payments", "agentic-commerce"],
+  "keywords": [
+    "astro",
+    "astro-integration",
+    "x402",
+    "crypto",
+    "usdc",
+    "base",
+    "payments",
+    "agentic-commerce",
+    "ai-agents"
+  ],
   "author": "AIOpsome (https://aiopsome.com)",
   "license": "MIT",
+  "homepage": "https://github.com/AIOpsome/agentic-payment-x402-astro/tree/main/packages/agentic-payment-x402-astro#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AIOpsome/agentic-payment-x402-astro.git",
+    "directory": "packages/agentic-payment-x402-astro"
+  },
+  "bugs": {
+    "url": "https://github.com/AIOpsome/agentic-payment-x402-astro/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",

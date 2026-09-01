@@ -2,9 +2,32 @@
   "name": "agentic-payment-x402-core",
   "version": "0.1.0",
   "description": "Universal TypeScript/JavaScript core engine for x402 stablecoin payments across client wallets and server facilitators.",
-  "keywords": ["x402", "crypto", "usdc", "base", "ethereum", "eip3009", "eip712", "payments", "agentic-commerce"],
+  "keywords": [
+    "x402",
+    "crypto",
+    "usdc",
+    "base",
+    "ethereum",
+    "eip3009",
+    "eip712",
+    "payments",
+    "agentic-commerce",
+    "ai-agents"
+  ],
   "author": "AIOpsome (https://aiopsome.com)",
   "license": "MIT",
+  "homepage": "https://github.com/AIOpsome/agentic-payment-x402-astro/tree/main/packages/agentic-payment-x402-core#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AIOpsome/agentic-payment-x402-astro.git",
+    "directory": "packages/agentic-payment-x402-core"
+  },
+  "bugs": {
+    "url": "https://github.com/AIOpsome/agentic-payment-x402-astro/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
