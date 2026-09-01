@@ -1,6 +1,6 @@
 {
   "name": "agentic-payment-x402-astro",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Agentic Pay for Astro — x402 payment gateway, HTTP 402 middleware for AI agents, and reactive wallet checkout components.",
   "keywords": [
     "astro",
