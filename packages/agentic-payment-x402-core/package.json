@@ -1,6 +1,6 @@
 {
   "name": "agentic-payment-x402-core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Universal TypeScript/JavaScript core engine for x402 stablecoin payments across client wallets and server facilitators.",
   "keywords": [
     "x402",
