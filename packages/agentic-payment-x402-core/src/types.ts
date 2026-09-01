@@ -37,6 +37,11 @@ export interface SettlementResult {
   payer?: string | null;
   facilitator?: string | null;
   message?: string | null;
+  /**
+   * Set when the transfer was already broadcast on-chain but failed a post-settlement cross-check.
+   * The funds may have moved: `txHash` and `payer` are the reconciliation handles.
+   */
+  requiresReconciliation?: boolean;
   rawResponse?: Record<string, unknown>;
 }
 

@@ -56,32 +56,47 @@ export default defineConfig({
 
 ### 3. Add Checkout Button to Any Page
 
+Both components require an `orderId`: the identifier of a real order or cart that already exists in
+your own storage, with a price you control. It is forwarded in the settlement POST body and is the
+only thing the endpoint prices from.
+
 ```astro
 ---
 import { AgenticPayButton, WalletCheckout } from 'agentic-payment-x402-astro/components';
+import { getOrder } from '../lib/orders';
+
+const order = await getOrder(Astro.params.orderId!);
 ---
 
 <!-- Single Button -->
 <AgenticPayButton
-  amount={2500}
+  orderId={order.id}
+  amount={order.totalUsd}
   currency="USD"
   payTo="0xYourMerchantWalletAddress..."
-  buttonText="Pay $2,500 USDC"
+  network="eip155:8453"
+  buttonText={`Pay $${order.totalUsd} USDC`}
   onSuccessRedirect="/onboarding/success"
 />
 
 <!-- Full Checkout Card -->
 <WalletCheckout
   title="SignalOps Retainer"
-  amount={2500}
+  orderId={order.id}
+  amount={order.totalUsd}
   currency="USD"
   payTo="0xYourMerchantWalletAddress..."
+  network="eip155:8453"
   onSuccessRedirect="/onboarding/success"
 />
 ```
 
-The `amount` prop only drives what the shopper is asked to sign. It is **never** what gets settled —
-the settlement endpoint prices the order server-side (next step).
+The `amount` prop only drives what is displayed and what the shopper is asked to sign, and the
+settlement endpoint may ignore or drop it entirely. It is **never** what gets settled — the endpoint
+re-prices the order from `orderId` server-side (next step). `network` must be a CAIP-2 identifier
+(`eip155:8453` Base, `eip155:84532` Base Sepolia) and must match the endpoint's configured network;
+the components forward `network` and `asset` in the POST body so a mismatch fails as an explicit
+400 rather than a silent wrong-chain signature.
 
 ### 4. Add the Settlement Endpoint (`src/pages/api/x402/settle.ts`)
 
@@ -89,19 +104,41 @@ the settlement endpoint prices the order server-side (next step).
 `accepted` requirements) is client-controlled, so the amount that gets settled must come from your
 own server-side state. Without it the handler refuses to start.
 
+`orderId` is the one body field it is safe to *look up* by — never to price by directly. Use it as a
+key into your own order storage and return that record's price:
+
 ```typescript
 import { createX402SettlementHandler } from 'agentic-payment-x402-astro/endpoints';
+import { db } from '../../../lib/db';
+
+/**
+ * Server-side order lookup. Replace with your real storage (Postgres, D1, Stripe, a CMS...).
+ * Returns null for an unknown, already-paid, or expired order so settlement is refused.
+ */
+async function getOrder(orderId: string) {
+  const order = await db.orders.findUnique({ where: { id: orderId } });
+  if (!order || order.status !== 'awaiting_payment') return null;
+  return order; // { id, totalUsd: 2500, status: 'awaiting_payment' }
+}
 
 export const POST = createX402SettlementHandler({
   payTo: process.env.MERCHANT_WALLET!,
+  network: 'eip155:8453',
   facilitators: ['https://facilitator.payai.network'],
-  // Price in major currency units, resolved from merchant-side state only.
+  // Price in major currency units, resolved from merchant-side state only. `orderId` is used purely
+  // as a lookup key — no value from the request body is ever returned as the price.
   resolveOrderAmount: async ({ orderId }) => {
-    const order = await getOrder(String(orderId));
+    if (typeof orderId !== 'string' || orderId === '') return null;
+    const order = await getOrder(orderId);
     return order?.totalUsd ?? null; // null / undefined refuses the settlement
   },
 });
 ```
+
+> **Never** write `resolveOrderAmount: ({ amount }) => amount` (or return any other value read out of
+> the request body). That hands the price back to the client and reintroduces the pay-any-price
+> vulnerability the required resolver exists to close: a shopper can then settle a $2,500 order for
+> $0.01. If you have no server-side price for a request, return `null`.
 
 A payload signed for less than the resolved price is rejected with `Amount mismatch` before the
 facilitator is ever contacted.
@@ -130,6 +167,25 @@ export const onRequest = createX402Middleware({
 4. **Idempotency & Nonce Management**: Cryptographically unique 32-byte nonces ensure zero duplicate charges.
 5. **Server-Side Pricing Only**: The settlement endpoint requires `resolveOrderAmount` and never reads a price from the request body, so a tampered `amount` cannot buy a $2,500 order for $0.01.
 6. **Fail-Closed Configuration**: Unknown networks, unusable route prices, and colliding protected-route keys raise explicit errors rather than silently defaulting to Base mainnet USDC.
+
+### Security Notes — What This Library Does *Not* Do
+
+- **Replay protection is not provided.** Each payload carries a unique EIP-3009 nonce, and the ERC-20
+  contract rejects a nonce it has already consumed, but this library keeps no record of seen nonces or
+  settled orders. It will happily forward the same payload to the facilitator twice, and a facilitator
+  that returns a cached success would produce two fulfilled orders for one on-chain transfer. Enforce
+  single-use yourself: mark the order paid inside the same transaction that fulfils it, reject
+  settlement for an order not in `awaiting_payment` (as the `getOrder` example above does), and/or
+  persist the authorization nonce and refuse a repeat.
+- **Fulfilment is your responsibility.** A `200 { success: true }` means the transfer was broadcast and
+  cross-checked; it does not fulfil, capture, or record anything on your side.
+- **Post-broadcast mismatches need reconciliation.** If the facilitator settles on an unexpected
+  network or for an unexpected amount, the failure is detected *after* the on-chain broadcast. The
+  response then carries `requiresReconciliation: true` with `txHash` and `payer`, and the same details
+  are logged at error level. Treat those as a paid-but-unfulfilled order and reconcile manually — the
+  customer's funds may have moved.
+- **Amounts are quantized to the asset's decimals** (6 for USDC), rounding half-up on the first dropped
+  digit. A price that rounds to zero atomic units is refused rather than settled for nothing.
 
 ---
 

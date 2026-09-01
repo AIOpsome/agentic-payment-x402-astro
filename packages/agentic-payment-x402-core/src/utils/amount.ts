@@ -11,7 +11,14 @@
  * @param assetDecimals Atomic decimals of the stablecoin (default 6 for USDC)
  */
 export function scaleToAssetUnits(amount: number | string, assetDecimals = 6): string {
-  const raw = typeof amount === 'number' ? String(amount) : String(amount).trim();
+  // String(1e-7) yields exponential notation, which the decimal grammar below rejects; expanding it
+  // keeps scaleToAssetUnits(0.0000005) and scaleToAssetUnits('0.0000005') behaving identically.
+  const raw =
+    typeof amount === 'number'
+      ? Number.isFinite(amount) && /e/i.test(String(amount))
+        ? amount.toFixed(assetDecimals + 1)
+        : String(amount)
+      : String(amount).trim();
   const normalized = raw.startsWith('+') ? raw.slice(1) : raw;
 
   if (!/^\d+(\.\d+)?$/.test(normalized) || Number(normalized) <= 0) {

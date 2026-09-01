@@ -41,4 +41,18 @@ describe('Amount scaling and formatting', () => {
     expect(() => scaleToAssetUnits('1e6')).toThrow(/positive number greater than zero/);
     expect(() => scaleToAssetUnits('$5.00')).toThrow(/positive number greater than zero/);
   });
+
+  it('treats a small JS number the same as its string form', () => {
+    // String(5e-7) is exponential notation, which the decimal grammar rejects; the two forms must
+    // not disagree, or a resolver returning a number 500s where the string equivalent settles.
+    expect(scaleToAssetUnits(0.0000005)).toBe(scaleToAssetUnits('0.0000005'));
+    expect(scaleToAssetUnits(0.0000005)).toBe('1');
+  });
+
+  it('is re-exported from the client entry the checkout components import from', async () => {
+    // The button's inline script does `import { scaleToAssetUnits } from '.../core/client'`; without
+    // this export the Astro client bundle fails to build.
+    const clientEntry = await import('../src/client/index.js');
+    expect(clientEntry.scaleToAssetUnits).toBe(scaleToAssetUnits);
+  });
 });

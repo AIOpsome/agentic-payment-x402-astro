@@ -41,6 +41,30 @@ export function createX402SettlementHandler(options: AgenticPayAstroOptions) {
         });
       }
 
+      // The client declares which network/asset it signed for so a merchant misconfiguration surfaces
+      // as an actionable error. Both are only ever compared against server config, never adopted.
+      if (typeof body.network === 'string' && body.network !== network) {
+        return new Response(
+          JSON.stringify({
+            error:
+              `Client signed for network ${body.network} but this endpoint is configured for ${network}. ` +
+              `Pass the same \`network\` to your component and to createX402SettlementHandler.`,
+          }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (typeof body.asset === 'string' && body.asset.toLowerCase() !== asset.toLowerCase()) {
+        return new Response(
+          JSON.stringify({
+            error:
+              `Client signed for asset ${body.asset} but this endpoint is configured for ${asset}. ` +
+              `Pass the same \`asset\` to your component and to createX402SettlementHandler.`,
+          }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
       const expectedAmount = await resolveOrderAmount(body);
       if (expectedAmount === undefined || expectedAmount === null || expectedAmount === '') {
         return new Response(
@@ -80,10 +104,18 @@ export function createX402SettlementHandler(options: AgenticPayAstroOptions) {
       const result = await facilitatorClient.settle(paymentPayload, requirements);
 
       if (!result.success) {
-        return new Response(JSON.stringify({ error: result.message || 'Settlement failed' }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        });
+        return new Response(
+          JSON.stringify({
+            error: result.message || 'Settlement failed',
+            // Present when the transfer was broadcast before the failure was detected: the merchant needs
+            // these to reconcile an on-chain payment that did not produce a fulfilled order.
+            requiresReconciliation: result.requiresReconciliation ?? false,
+            txHash: result.txHash ?? null,
+            payer: result.payer ?? null,
+            settledAmount: result.settledAmount ?? null,
+          }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } }
+        );
       }
 
       return new Response(JSON.stringify(result), {

@@ -159,6 +159,9 @@ export function createX402Middleware(options: AgenticPayAstroOptions) {
         JSON.stringify({
           error: 'Settlement Failed',
           message: settlement.message,
+          requiresReconciliation: settlement.requiresReconciliation ?? false,
+          txHash: settlement.txHash ?? null,
+          payer: settlement.payer ?? null,
         }),
         {
           status: 402,

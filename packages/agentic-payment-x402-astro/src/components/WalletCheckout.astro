@@ -4,26 +4,43 @@ import AgenticPayButton from './AgenticPayButton.astro';
 export interface Props {
   title?: string;
   description?: string;
+  /**
+   * Stable merchant-side identifier for the order or cart being paid, forwarded to the settlement
+   * endpoint so `resolveOrderAmount` can look up the real server-side price.
+   */
+  orderId: string;
+  /** Display and signing amount only. The settlement endpoint ignores it and prices server-side. */
   amount: number | string;
   currency?: string;
   payTo?: string;
+  /** CAIP-2 network identifier, e.g. 'eip155:8453' (Base) or 'eip155:84532' (Base Sepolia). */
   network?: string;
+  /** ERC-20 contract address of the settlement asset. Defaults to USDC on `network`. */
   asset?: string;
   endpoint?: string;
   onSuccessRedirect?: string;
 }
 
+const NETWORK_LABELS: Record<string, string> = {
+  'eip155:8453': 'Base (Mainnet)',
+  'eip155:84532': 'Base Sepolia (Testnet)',
+};
+
 const {
   title = 'Order Checkout',
   description = 'Pay seamlessly via stablecoin using the x402 receive-only settlement standard.',
+  orderId,
   amount,
   currency = 'USD',
   payTo,
-  network = 'Base (Mainnet)',
-  asset = 'USDC',
+  network = 'eip155:8453',
+  asset,
   endpoint = '/api/x402/settle',
   onSuccessRedirect,
 } = Astro.props;
+
+const networkLabel = NETWORK_LABELS[network] || network;
+const assetLabel = asset ? `USDC (${asset.slice(0, 6)}…${asset.slice(-4)})` : 'USDC';
 ---
 
 <div class="x402-checkout-card">
@@ -40,19 +57,22 @@ const {
     </div>
     <div class="row details">
       <span>Asset:</span>
-      <span>{asset}</span>
+      <span>{assetLabel}</span>
     </div>
     <div class="row details">
       <span>Network:</span>
-      <span>{network}</span>
+      <span>{networkLabel}</span>
     </div>
   </div>
 
   <div class="x402-card-footer">
     <AgenticPayButton
+      orderId={orderId}
       amount={amount}
       currency={currency}
       payTo={payTo}
+      network={network}
+      asset={asset}
       endpoint={endpoint}
       onSuccessRedirect={onSuccessRedirect}
       class="w-full"
