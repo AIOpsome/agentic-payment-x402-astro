@@ -39,6 +39,36 @@ describe('Payment Payload Validator', () => {
     expect(res.error).toContain('Unsupported x402 version');
   });
 
+  it('rejects scheme mismatch', () => {
+    const res = validatePaymentPayload(
+      {
+        ...validPayload,
+        accepted: { ...reqs, scheme: 'subscription' as any },
+      },
+      reqs
+    );
+    expect(res.valid).toBe(false);
+    expect(res.error).toContain('Scheme mismatch');
+  });
+
+  it('rejects validAfter in the future', () => {
+    const res = validatePaymentPayload(
+      {
+        ...validPayload,
+        payload: {
+          ...validPayload.payload,
+          authorization: {
+            ...validPayload.payload.authorization,
+            validAfter: Math.floor(Date.now() / 1000) + 5000,
+          },
+        },
+      },
+      reqs
+    );
+    expect(res.valid).toBe(false);
+    expect(res.error).toContain('Authorization is not yet valid');
+  });
+
   it('rejects amount mismatch', () => {
     const res = validatePaymentPayload(
       {

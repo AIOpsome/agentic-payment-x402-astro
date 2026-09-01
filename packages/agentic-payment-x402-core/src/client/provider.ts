@@ -2,32 +2,16 @@
  * EIP-1193 Ethereum provider detection and chain management.
  */
 
-import type { NetworkConfig } from '../types.js';
+import { KNOWN_NETWORKS } from '../networks.js';
 
-export const BASE_MAINNET: NetworkConfig = {
-  caip2: 'eip155:8453',
-  chainId: 8453,
-  name: 'Base',
-  isTestnet: false,
-  rpcUrl: 'https://mainnet.base.org',
-  blockExplorerUrl: 'https://basescan.org',
-  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-};
-
-export const BASE_SEPOLIA: NetworkConfig = {
-  caip2: 'eip155:84532',
-  chainId: 84532,
-  name: 'Base Sepolia',
-  isTestnet: true,
-  rpcUrl: 'https://sepolia.base.org',
-  blockExplorerUrl: 'https://sepolia.basescan.org',
-  nativeCurrency: { name: 'Sepolia Ether', symbol: 'ETH', decimals: 18 },
-};
-
-export const KNOWN_NETWORKS: Record<number, NetworkConfig> = {
-  8453: BASE_MAINNET,
-  84532: BASE_SEPOLIA,
-};
+export {
+  BASE_MAINNET,
+  BASE_SEPOLIA,
+  KNOWN_NETWORKS,
+  KNOWN_NETWORKS_BY_CAIP2,
+  getTokenDomainForNetwork,
+} from '../networks.js';
+export type { ExtendedNetworkConfig, TokenDomain } from '../networks.js';
 
 export interface Eip1193Provider {
   request(args: { method: string; params?: unknown[] | Record<string, unknown> }): Promise<unknown>;

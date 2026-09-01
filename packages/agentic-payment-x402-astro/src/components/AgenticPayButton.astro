@@ -1,5 +1,11 @@
 ---
 export interface Props {
+  /**
+   * Stable merchant-side identifier for the order or cart being paid. It is the only value the
+   * settlement endpoint can price from: `resolveOrderAmount` receives it and looks up the real price.
+   */
+  orderId: string;
+  /** Display and signing amount only. The settlement endpoint ignores it and prices server-side. */
   amount: number | string;
   currency?: string;
   payTo?: string;
@@ -12,6 +18,7 @@ export interface Props {
 }
 
 const {
+  orderId,
   amount,
   currency = 'USD',
   payTo,
@@ -23,6 +30,14 @@ const {
   onSuccessRedirect,
 } = Astro.props;
 
+if (typeof orderId !== 'string' || orderId.trim() === '') {
+  throw new Error(
+    'AgenticPayButton: the `orderId` prop is required and must be a non-empty string. ' +
+      'It is forwarded to the settlement endpoint, whose `resolveOrderAmount` uses it to look up the ' +
+      'real server-side price; without it every settlement is refused.'
+  );
+}
+
 const buttonId = `agentic-pay-${Math.random().toString(36).substring(2, 9)}`;
 ---
 
@@ -30,6 +45,7 @@ const buttonId = `agentic-pay-${Math.random().toString(36).substring(2, 9)}`;
   id={buttonId}
   type="button"
   class:list={['agentic-pay-btn', className]}
+  data-orderid={orderId}
   data-amount={amount}
   data-currency={currency}
   data-payto={payTo}
@@ -71,16 +87,20 @@ const buttonId = `agentic-pay-${Math.random().toString(36).substring(2, 9)}`;
 
 <script>
   import { signPaymentAuthorization, scaleToAssetUnits } from 'agentic-payment-x402-core/client';
+  import { buildSettlementRequestBody } from './settlementRequest';
 
   document.querySelectorAll<HTMLButtonElement>('.agentic-pay-btn').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const textSpan = btn.querySelector<HTMLElement>('.btn-text');
       const spinnerSpan = btn.querySelector<HTMLElement>('.btn-spinner');
 
+      const orderId = btn.dataset.orderid || '';
       const amount = btn.dataset.amount || '0';
       const payTo = btn.dataset.payto || '';
       const network = btn.dataset.network || 'eip155:8453';
-      const asset = btn.dataset.asset || '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+      const asset = btn.dataset.asset || (network === 'eip155:84532'
+        ? '0x036CbD53842c5426634e7929541eC2318f3dCF7e'
+        : '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913');
       const endpoint = btn.dataset.endpoint || '/api/x402/settle';
       const redirect = btn.dataset.redirect;
 
@@ -112,7 +132,9 @@ const buttonId = `agentic-pay-${Math.random().toString(36).substring(2, 9)}`;
         const res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ paymentPayload: payload, amount }),
+          body: JSON.stringify(
+            buildSettlementRequestBody({ orderId, paymentPayload: payload, amount, network, asset })
+          ),
         });
 
         const data = await res.json();

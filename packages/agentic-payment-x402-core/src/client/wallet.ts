@@ -5,7 +5,12 @@
 import { buildTransferAuthorizationTypedData } from '../crypto/eip712.js';
 import { generateNonce } from '../crypto/nonce.js';
 import type { PaymentPayload, PaymentRequirements } from '../types.js';
-import { detectEthereumProvider, switchOrAddNetwork, type Eip1193Provider } from './provider.js';
+import {
+  detectEthereumProvider,
+  switchOrAddNetwork,
+  KNOWN_NETWORKS_BY_CAIP2,
+  type Eip1193Provider,
+} from './provider.js';
 
 export interface SignPaymentOptions {
   provider?: Eip1193Provider;
@@ -27,8 +32,10 @@ export async function signPaymentAuthorization(
     throw new Error('No Web3/EIP-1193 Ethereum wallet detected. Please install a wallet extension.');
   }
 
-  // 1. Extract chainId from CAIP-2 (e.g. 'eip155:8453' -> 8453)
-  const chainId = parseInt(options.requirements.network.split(':')[1] || '8453', 10);
+  // 1. Extract chainId and network config from CAIP-2 (e.g. 'eip155:8453' -> 8453)
+  const networkKey = options.requirements.network;
+  const chainId = parseInt(networkKey.split(':')[1] || '8453', 10);
+  const networkDefaults = KNOWN_NETWORKS_BY_CAIP2[networkKey];
 
   // 2. Request account connection
   const accounts = (await provider.request({ method: 'eth_requestAccounts' })) as string[];
@@ -55,13 +62,21 @@ export async function signPaymentAuthorization(
     nonce,
   };
 
-  // 5. Build EIP-712 payload
+  // 5. Build EIP-712 payload with network-correct domain defaults
+  const verifyingContract = options.requirements.asset || networkDefaults?.defaultAsset;
+  if (!verifyingContract) {
+    throw new Error(
+      `No token contract address available for network "${networkKey}": set \`asset\` on the payment requirements.`
+    );
+  }
+
   const typedData = buildTransferAuthorizationTypedData(
     {
-      name: options.tokenName || 'USD Coin',
-      version: options.tokenVersion || '2',
+      name: options.tokenName,
+      version: options.tokenVersion,
+      network: options.tokenName ? undefined : networkKey,
       chainId,
-      verifyingContract: options.requirements.asset,
+      verifyingContract,
     },
     authData
   );

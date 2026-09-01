@@ -50,7 +50,9 @@
       "types": "./dist/components/index.d.ts",
       "import": "./dist/components/index.mjs",
       "require": "./dist/components/index.js"
-    }
+    },
+    "./components/AgenticPayButton.astro": "./src/components/AgenticPayButton.astro",
+    "./components/WalletCheckout.astro": "./src/components/WalletCheckout.astro"
   },
   "files": [
     "dist",

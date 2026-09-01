@@ -15,4 +15,44 @@ describe('Amount scaling and formatting', () => {
     expect(formatAssetUnits('2500000000')).toBe('2500');
     expect(formatAssetUnits('50000')).toBe('0.05');
   });
+
+  it('rejects zero, negative, or invalid amounts', () => {
+    expect(() => scaleToAssetUnits(0)).toThrow(/positive number greater than zero/);
+    expect(() => scaleToAssetUnits(-10)).toThrow(/positive number greater than zero/);
+    expect(() => scaleToAssetUnits('-5.00')).toThrow(/positive number greater than zero/);
+    expect(() => scaleToAssetUnits('invalid')).toThrow(/positive number greater than zero/);
+  });
+
+  it('rounds sub-unit precision half-up instead of truncating (Issue #7)', () => {
+    expect(scaleToAssetUnits('10.9999999')).toBe('11000000');
+    expect(scaleToAssetUnits('0.0000005')).toBe('1');
+    expect(scaleToAssetUnits('1.2345675')).toBe('1234568');
+    expect(scaleToAssetUnits('1.2345674')).toBe('1234567');
+    expect(scaleToAssetUnits(10.9999999)).toBe('11000000');
+    expect(scaleToAssetUnits('1.005', 2)).toBe('101');
+  });
+
+  it('rejects amounts that round down to zero units', () => {
+    expect(() => scaleToAssetUnits('0.0000004')).toThrow(/zero units/);
+  });
+
+  it('rejects malformed numeric strings', () => {
+    expect(() => scaleToAssetUnits('1.2.3')).toThrow(/positive number greater than zero/);
+    expect(() => scaleToAssetUnits('1e6')).toThrow(/positive number greater than zero/);
+    expect(() => scaleToAssetUnits('$5.00')).toThrow(/positive number greater than zero/);
+  });
+
+  it('treats a small JS number the same as its string form', () => {
+    // String(5e-7) is exponential notation, which the decimal grammar rejects; the two forms must
+    // not disagree, or a resolver returning a number 500s where the string equivalent settles.
+    expect(scaleToAssetUnits(0.0000005)).toBe(scaleToAssetUnits('0.0000005'));
+    expect(scaleToAssetUnits(0.0000005)).toBe('1');
+  });
+
+  it('is re-exported from the client entry the checkout components import from', async () => {
+    // The button's inline script does `import { scaleToAssetUnits } from '.../core/client'`; without
+    // this export the Astro client bundle fails to build.
+    const clientEntry = await import('../src/client/index.js');
+    expect(clientEntry.scaleToAssetUnits).toBe(scaleToAssetUnits);
+  });
 });

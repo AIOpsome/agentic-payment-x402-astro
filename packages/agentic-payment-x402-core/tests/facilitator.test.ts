@@ -55,6 +55,7 @@ describe('Facilitator Client', () => {
 
     expect(result.success).toBe(true);
     expect(result.txHash).toBe('0xtxhash123');
+    expect(result.settledAmount).toBe('1000000');
   });
 
   it('attaches CDP authentication headers when api keys are present', async () => {
@@ -76,6 +77,7 @@ describe('Facilitator Client', () => {
               success: true,
               transaction: '0xcdptx',
               network: 'eip155:8453',
+              amount: '1000000',
             }),
         });
       }
@@ -96,5 +98,72 @@ describe('Facilitator Client', () => {
     expect(capturedHeaders['Authorization']).toBe('Bearer my_secret_token');
     expect(capturedHeaders['CB-ACCESS-KEY']).toBe('my_key_id');
     expect(capturedHeaders['X-CDP-KEY-ID']).toBe('my_key_id');
+  });
+
+  it('rejects settlement when facilitator returns mismatched amount', async () => {
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.endsWith('/verify')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ isValid: true }),
+        });
+      }
+      if (url.endsWith('/settle')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              success: true,
+              transaction: '0xtxhash123',
+              network: 'eip155:8453',
+              amount: '500000', // Mismatched lower amount
+            }),
+        });
+      }
+      return Promise.reject(new Error('Unknown URL'));
+    });
+
+    const client = new FacilitatorClient(['https://facilitator.payai.network']);
+    const result = await client.settle(payload, reqs);
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('does not match required amount');
+
+    // The mismatch is only detectable after the transfer was broadcast, so the caller needs the
+    // handles to find the orphaned on-chain payment.
+    expect(result.requiresReconciliation).toBe(true);
+    expect(result.txHash).toBe('0xtxhash123');
+    expect(result.payer).toBe(payload.payload.authorization.from);
+    expect(result.settledAmount).toBe('500000');
+  });
+
+  it('carries the reconciliation trail when the facilitator settles on the wrong network', async () => {
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.endsWith('/verify')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ isValid: true }) });
+      }
+      if (url.endsWith('/settle')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              success: true,
+              transaction: '0xwrongchain',
+              network: 'eip155:1',
+              payer: '0x9999999999999999999999999999999999999999',
+            }),
+        });
+      }
+      return Promise.reject(new Error('Unknown URL'));
+    });
+
+    const client = new FacilitatorClient(['https://facilitator.payai.network']);
+    const result = await client.settle(payload, reqs);
+
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('unexpected network');
+    expect(result.requiresReconciliation).toBe(true);
+    expect(result.txHash).toBe('0xwrongchain');
+    expect(result.payer).toBe('0x9999999999999999999999999999999999999999');
   });
 });

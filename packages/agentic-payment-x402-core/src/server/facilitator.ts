@@ -122,19 +122,46 @@ export class FacilitatorClient {
           };
         }
 
+        // These cross-checks run after /settle has already broadcast on-chain, so a mismatch means the
+        // customer's funds may have moved: carry the tx hash and payer so the merchant can reconcile.
+        const reconciliationFailure = (message: string): SettlementResult => {
+          const result: SettlementResult = {
+            success: false,
+            message,
+            requiresReconciliation: true,
+            txHash: settleData.transaction || null,
+            settledAmount: settleData.amount !== undefined ? settleData.amount : null,
+            payer: settleData.payer || payload.payload.authorization.from,
+            facilitator: baseUrl,
+            rawResponse: settleData as Record<string, unknown>,
+          };
+          console.error(
+            `[agentic-payment-x402] Settlement broadcast but post-settlement check failed — manual reconciliation required. ` +
+              `${message} txHash=${result.txHash} payer=${result.payer} facilitator=${baseUrl}`
+          );
+          return result;
+        };
+
         // Security check: verify settled network matches requested
         if (settleData.network && settleData.network !== requirements.network) {
-          return {
-            success: false,
-            message: `Facilitator settled on unexpected network ${settleData.network}, expected ${requirements.network}`,
-            facilitator: baseUrl,
-          };
+          return reconciliationFailure(
+            `Facilitator settled on unexpected network ${settleData.network}, expected ${requirements.network}`
+          );
+        }
+
+        // Security check: verify settled amount matches requested
+        if (settleData.amount !== undefined && settleData.amount !== null) {
+          if (String(settleData.amount) !== String(requirements.amount)) {
+            return reconciliationFailure(
+              `Facilitator settled amount ${settleData.amount} does not match required amount ${requirements.amount}`
+            );
+          }
         }
 
         return {
           success: true,
           txHash: settleData.transaction || null,
-          settledAmount: settleData.amount || requirements.amount,
+          settledAmount: settleData.amount !== undefined ? settleData.amount : null,
           payer: settleData.payer || payload.payload.authorization.from,
           facilitator: baseUrl,
           rawResponse: settleData as Record<string, unknown>,

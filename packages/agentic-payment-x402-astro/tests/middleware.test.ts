@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createX402Middleware } from '../src/middleware.js';
+import { createX402Middleware, normalizeRoutePath } from '../src/middleware.js';
+import { decodeBase64, encodeBase64 } from '../src/base64.js';
 import type { PaymentPayload, PaymentRequirements } from 'agentic-payment-x402-core';
 
 describe('Astro x402 Middleware', () => {
@@ -12,39 +13,100 @@ describe('Astro x402 Middleware', () => {
 
   const middleware = createX402Middleware(options);
 
+  function contextFor(path: string) {
+    const url = new URL('http://localhost' + path);
+    return { request: new Request(url.toString()), url, locals: {} };
+  }
+
   it('passes through unprotected routes untouched', async () => {
     const next = vi.fn().mockResolvedValue(new Response('OK', { status: 200 }));
-    const context = {
-      request: new Request('http://localhost/api/free-content'),
-      url: new URL('http://localhost/api/free-content'),
-      locals: {},
-    };
 
-    const response = await middleware(context, next);
+    const response = await middleware(contextFor('/api/free-content'), next);
     expect(response.status).toBe(200);
     expect(next).toHaveBeenCalled();
   });
 
-  it('returns HTTP 402 with PaymentRequirements when no payment header is provided', async () => {
+  it('intercepts trailing-slash variant of protected route safely (Issue #6)', async () => {
     const next = vi.fn();
-    const context = {
-      request: new Request('http://localhost/api/premium-report'),
-      url: new URL('http://localhost/api/premium-report'),
-      locals: {},
-    };
 
-    const response = await middleware(context, next);
+    const response = await middleware(contextFor('/api/premium-report/'), next);
     expect(response.status).toBe(402);
     expect(next).not.toHaveBeenCalled();
 
-    const body = await response.json();
-    expect(body.error).toBe('Payment Required');
-    expect(body.x402Version).toBe(2);
-    expect(body.paymentRequirements.amount).toBe('5000000'); // $5.00 scaled to 6 decimals
-    expect(body.paymentRequirements.payTo).toBe(options.payTo);
+    expect(response.headers.get('PAYMENT-REQUIRED')).not.toBeNull();
   });
 
-  it('settles and passes through when valid X-Payment header is supplied', async () => {
+  it('intercepts duplicate-slash, percent-encoded, case and dot-segment variants (Issue #6)', async () => {
+    const bypasses = [
+      '//api/premium-report',
+      '///api//premium-report',
+      '/api/premium%2Dreport',
+      '/API/Premium-Report',
+      '/api/./premium-report',
+      '/api/other/%2E%2E/premium-report',
+      '/api%2Fpremium-report',
+      '/api/premium-report//',
+    ];
+
+    for (const path of bypasses) {
+      const next = vi.fn().mockResolvedValue(new Response('PAID CONTENT', { status: 200 }));
+      const response = await middleware(contextFor(path), next);
+      expect(response.status, `${path} should require payment`).toBe(402);
+      expect(next, `${path} should not be served unpaid`).not.toHaveBeenCalled();
+    }
+  });
+
+  it('normalizes route paths without breaking distinct routes', () => {
+    expect(normalizeRoutePath('//api//premium-report/')).toBe('/api/premium-report');
+    expect(normalizeRoutePath('/api/premium%2Dreport')).toBe('/api/premium-report');
+    expect(normalizeRoutePath('/')).toBe('/');
+    expect(normalizeRoutePath('/api/a')).not.toBe(normalizeRoutePath('/api/b'));
+    // A malformed escape must not throw; it simply matches on the raw path.
+    expect(normalizeRoutePath('/api/%zz')).toBe('/api/%zz');
+  });
+
+  it('rejects a protected route map whose keys collide after normalization', () => {
+    expect(() =>
+      createX402Middleware({ payTo: options.payTo, protectedRoutes: { '/api/a': 1, '/API/A/': 2 } })
+    ).toThrow(/both normalize to/);
+  });
+
+  it('returns a diagnosable 500 for a route configured with an unusable price', async () => {
+    const brokenMiddleware = createX402Middleware({
+      payTo: options.payTo,
+      protectedRoutes: { '/api/broken': 0 },
+    });
+
+    const next = vi.fn();
+    const response = await brokenMiddleware(contextFor('/api/broken'), next);
+    expect(response.status).toBe(500);
+    expect(next).not.toHaveBeenCalled();
+    const body = await response.json();
+    expect(body.message).toContain('unusable price');
+  });
+
+  it('returns HTTP 402 with a single, spec-decodable PAYMENT-REQUIRED header (Issue #2)', async () => {
+    const next = vi.fn();
+
+    const response = await middleware(contextFor('/api/premium-report'), next);
+    expect(response.status).toBe(402);
+    expect(next).not.toHaveBeenCalled();
+
+    const requiredHeader = response.headers.get('PAYMENT-REQUIRED');
+    expect(requiredHeader).not.toBeNull();
+    // A duplicated header would be comma-joined and break spec-compliant atob() decoders.
+    expect(requiredHeader).not.toContain(',');
+    expect(() => atob(requiredHeader!)).not.toThrow();
+
+    const decoded = JSON.parse(decodeBase64(requiredHeader!));
+    expect(decoded.x402Version).toBe(2);
+    expect(decoded.accepts[0].amount).toBe('5000000');
+
+    // x402 v2 requires an empty JSON body on the 402 response.
+    expect(await response.json()).toEqual({});
+  });
+
+  it('settles with PAYMENT-SIGNATURE header and responds with PAYMENT-RESPONSE (Issue #2)', async () => {
     const reqs: PaymentRequirements = {
       scheme: 'exact',
       network: 'eip155:8453',
@@ -92,11 +154,12 @@ describe('Astro x402 Middleware', () => {
       return Promise.reject(new Error('Unknown URL'));
     });
 
+    const base64Payload = encodeBase64(JSON.stringify(payload));
     const next = vi.fn().mockResolvedValue(new Response('Premium Content Delivered', { status: 200 }));
     const context = {
       request: new Request('http://localhost/api/premium-report', {
         headers: {
-          'X-Payment': JSON.stringify(payload),
+          'PAYMENT-SIGNATURE': base64Payload,
         },
       }),
       url: new URL('http://localhost/api/premium-report'),
@@ -106,6 +169,16 @@ describe('Astro x402 Middleware', () => {
     const response = await middleware(context, next);
     expect(response.status).toBe(200);
     expect(next).toHaveBeenCalled();
-    expect(response.headers.get('X-Payment-Transaction')).toBe('0xtx789');
+
+    const responseHeader = response.headers.get('PAYMENT-RESPONSE');
+    expect(responseHeader).not.toBeNull();
+    expect(responseHeader).not.toContain(',');
+    const decodedRes = JSON.parse(decodeBase64(responseHeader!));
+    expect(decodedRes.transaction).toBe('0xtx789');
+  });
+
+  it('encodes and decodes payment headers without Node Buffer (edge runtime support)', () => {
+    const value = JSON.stringify({ note: 'unicode ✓ payload' });
+    expect(decodeBase64(encodeBase64(value))).toBe(value);
   });
 });
