@@ -1,0 +1,118 @@
+---
+import AgenticPayButton from './AgenticPayButton.astro';
+
+export interface Props {
+  title?: string;
+  description?: string;
+  amount: number | string;
+  currency?: string;
+  payTo?: string;
+  network?: string;
+  asset?: string;
+  endpoint?: string;
+  onSuccessRedirect?: string;
+}
+
+const {
+  title = 'Order Checkout',
+  description = 'Pay seamlessly via stablecoin using the x402 receive-only settlement standard.',
+  amount,
+  currency = 'USD',
+  payTo,
+  network = 'Base (Mainnet)',
+  asset = 'USDC',
+  endpoint = '/api/x402/settle',
+  onSuccessRedirect,
+} = Astro.props;
+---
+
+<div class="x402-checkout-card">
+  <div class="x402-card-header">
+    <div class="badge">Agentic Pay</div>
+    <h3>{title}</h3>
+    <p class="description">{description}</p>
+  </div>
+
+  <div class="x402-card-body">
+    <div class="row">
+      <span>Total Due:</span>
+      <span class="amount">${amount} {currency}</span>
+    </div>
+    <div class="row details">
+      <span>Asset:</span>
+      <span>{asset}</span>
+    </div>
+    <div class="row details">
+      <span>Network:</span>
+      <span>{network}</span>
+    </div>
+  </div>
+
+  <div class="x402-card-footer">
+    <AgenticPayButton
+      amount={amount}
+      currency={currency}
+      payTo={payTo}
+      endpoint={endpoint}
+      onSuccessRedirect={onSuccessRedirect}
+      class="w-full"
+    />
+  </div>
+</div>
+
+<style>
+  .x402-checkout-card {
+    background: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 1rem;
+    padding: 1.5rem;
+    max-width: 420px;
+    color: #f8fafc;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+  .badge {
+    display: inline-block;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.1);
+    border-radius: 9999px;
+    margin-bottom: 0.5rem;
+  }
+  .x402-card-header h3 {
+    margin: 0 0 0.25rem 0;
+    font-size: 1.25rem;
+  }
+  .description {
+    color: #94a3b8;
+    font-size: 0.875rem;
+    margin: 0 0 1.25rem 0;
+  }
+  .x402-card-body {
+    background: #1e293b;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.95rem;
+  }
+  .row.details {
+    color: #94a3b8;
+    font-size: 0.85rem;
+    margin-top: 0.4rem;
+  }
+  .amount {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #38bdf8;
+  }
+  :global(.w-full) {
+    width: 100%;
+  }
+</style>

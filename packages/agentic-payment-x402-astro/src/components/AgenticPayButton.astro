@@ -1,0 +1,141 @@
+---
+export interface Props {
+  amount: number | string;
+  currency?: string;
+  payTo?: string;
+  network?: string;
+  asset?: string;
+  endpoint?: string;
+  buttonText?: string;
+  class?: string;
+  onSuccessRedirect?: string;
+}
+
+const {
+  amount,
+  currency = 'USD',
+  payTo,
+  network,
+  asset,
+  endpoint = '/api/x402/settle',
+  buttonText = 'Pay with USDC (x402)',
+  class: className = '',
+  onSuccessRedirect,
+} = Astro.props;
+
+const buttonId = `agentic-pay-${Math.random().toString(36).substring(2, 9)}`;
+---
+
+<button
+  id={buttonId}
+  type="button"
+  class:list={['agentic-pay-btn', className]}
+  data-amount={amount}
+  data-currency={currency}
+  data-payto={payTo}
+  data-network={network}
+  data-asset={asset}
+  data-endpoint={endpoint}
+  data-redirect={onSuccessRedirect}
+>
+  <span class="btn-text">{buttonText}</span>
+  <span class="btn-spinner" style="display: none;">Processing...</span>
+</button>
+
+<style>
+  .agentic-pay-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #ffffff;
+    background: linear-gradient(135deg, #0052ff 0%, #0033aa 100%);
+    border: none;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 12px rgba(0, 82, 255, 0.25);
+  }
+  .agentic-pay-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(0, 82, 255, 0.35);
+  }
+  .agentic-pay-btn:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+    transform: none;
+  }
+</style>
+
+<script>
+  import { signPaymentAuthorization, scaleToAssetUnits } from 'agentic-payment-x402-core/client';
+
+  document.querySelectorAll<HTMLButtonElement>('.agentic-pay-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const textSpan = btn.querySelector<HTMLElement>('.btn-text');
+      const spinnerSpan = btn.querySelector<HTMLElement>('.btn-spinner');
+
+      const amount = btn.dataset.amount || '0';
+      const payTo = btn.dataset.payto || '';
+      const network = btn.dataset.network || 'eip155:8453';
+      const asset = btn.dataset.asset || '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+      const endpoint = btn.dataset.endpoint || '/api/x402/settle';
+      const redirect = btn.dataset.redirect;
+
+      try {
+        btn.disabled = true;
+        if (textSpan) textSpan.style.display = 'none';
+        if (spinnerSpan) {
+          spinnerSpan.style.display = 'inline';
+          spinnerSpan.textContent = 'Connecting Wallet...';
+        }
+
+        const atomicAmount = scaleToAssetUnits(amount, 6);
+
+        const requirements = {
+          scheme: 'exact' as const,
+          network,
+          amount: atomicAmount,
+          asset,
+          payTo,
+          maxTimeoutSeconds: 60,
+        };
+
+        if (spinnerSpan) spinnerSpan.textContent = 'Awaiting Signature...';
+
+        const payload = await signPaymentAuthorization({ requirements });
+
+        if (spinnerSpan) spinnerSpan.textContent = 'Settling On-Chain...';
+
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paymentPayload: payload, amount }),
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || data.message || 'Payment settlement failed');
+        }
+
+        if (spinnerSpan) spinnerSpan.textContent = 'Payment Confirmed!';
+        btn.style.background = '#10B981';
+
+        btn.dispatchEvent(new CustomEvent('x402:success', { detail: data, bubbles: true }));
+
+        if (redirect) {
+          setTimeout(() => {
+            window.location.href = redirect;
+          }, 1000);
+        }
+      } catch (err: unknown) {
+        alert((err as Error).message);
+        btn.disabled = false;
+        if (textSpan) textSpan.style.display = 'inline';
+        if (spinnerSpan) spinnerSpan.style.display = 'none';
+      }
+    });
+  });
+</script>
